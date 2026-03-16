@@ -1,0 +1,192 @@
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public class EndlessRunnerGame : MonoBehaviour
+{
+    [Header("Player")]
+    public Rigidbody2D playerRB;
+    public Animator playerAnim;
+    public float jumpForce = 8f;
+    private bool isGrounded = true;
+
+    [Header("Spawning")]
+    public GameObject[] obstacles; // 3 obstacle types
+    public GameObject coin;
+    public Transform spawnPoint;
+    public float spawnRate = 2f;
+    private float spawnTimer = 0f;
+
+    [Header("Difficulty")]
+    public float gameSpeed = 5f;
+    public float speedIncrease = 0.05f;
+
+    [Header("Score")]
+    public int score = 0;
+
+    [Header("Audio")]
+    public AudioSource coinSound;
+    public AudioSource hitSound;
+
+    [Header("Effects")]
+    public ParticleSystem coinParticles;
+    public ParticleSystem hitParticles;
+
+    [Header("Camera")]
+    public Transform cameraTransform;
+    public float shakeDuration = 0.2f;
+    public float shakeMagnitude = 0.2f;
+
+    private bool gameOver = false;
+
+    void Update()
+    {
+        if (gameOver) return;
+
+        HandleJump();
+        HandleSpawning();
+        IncreaseDifficulty();
+    }
+
+    void HandleJump()
+    {
+        if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
+        {
+            playerRB.velocity = Vector2.up * jumpForce;
+            playerAnim.SetTrigger("Jump");
+            isGrounded = false;
+        }
+    }
+
+    void HandleSpawning()
+    {
+        spawnTimer += Time.deltaTime;
+
+        if (spawnTimer >= spawnRate)
+        {
+            SpawnObstacle();
+            SpawnCoin();
+
+            spawnTimer = 0;
+        }
+    }
+
+    void SpawnObstacle()
+    {
+        int index = Random.Range(0, obstacles.Length);
+        GameObject obj = Instantiate(obstacles[index], spawnPoint.position, Quaternion.identity);
+
+        obj.AddComponent<ObstacleMove>().speed = gameSpeed;
+    }
+
+    void SpawnCoin()
+    {
+        if (Random.value > 0.5f)
+        {
+            Vector3 pos = spawnPoint.position + new Vector3(0, Random.Range(-1f, 2f), 0);
+            GameObject c = Instantiate(coin, pos, Quaternion.identity);
+
+            c.AddComponent<CoinMove>().speed = gameSpeed;
+        }
+    }
+
+    void IncreaseDifficulty()
+    {
+        gameSpeed += speedIncrease * Time.deltaTime;
+
+        spawnRate = Mathf.Max(0.7f, spawnRate - Time.deltaTime * 0.01f);
+    }
+
+    public void CollectCoin(Vector3 position)
+    {
+        score++;
+
+        if (coinSound) coinSound.Play();
+
+        if (coinParticles)
+            Instantiate(coinParticles, position, Quaternion.identity);
+    }
+
+    public void HitObstacle(Vector3 position)
+    {
+        gameOver = true;
+
+        if (hitSound) hitSound.Play();
+
+        if (hitParticles)
+            Instantiate(hitParticles, position, Quaternion.identity);
+
+        StartCoroutine(CameraShake());
+
+        Invoke("RestartGame", 2f);
+    }
+
+    System.Collections.IEnumerator CameraShake()
+    {
+        Vector3 originalPos = cameraTransform.localPosition;
+
+        float elapsed = 0f;
+
+        while (elapsed < shakeDuration)
+        {
+            float x = Random.Range(-1f, 1f) * shakeMagnitude;
+            float y = Random.Range(-1f, 1f) * shakeMagnitude;
+
+            cameraTransform.localPosition = new Vector3(x, y, originalPos.z);
+
+            elapsed += Time.deltaTime;
+
+            yield return null;
+        }
+
+        cameraTransform.localPosition = originalPos;
+    }
+
+    void RestartGame()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (collision.gameObject.CompareTag("Ground"))
+            isGrounded = true;
+
+        if (collision.gameObject.CompareTag("Obstacle"))
+            HitObstacle(collision.transform.position);
+    }
+
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (other.CompareTag("Coin"))
+        {
+            CollectCoin(other.transform.position);
+            Destroy(other.gameObject);
+        }
+    }
+}
+
+public class ObstacleMove : MonoBehaviour
+{
+    public float speed = 5f;
+
+    void Update()
+    {
+        transform.Translate(Vector2.left * speed * Time.deltaTime);
+
+        if (transform.position.x < -15)
+            Destroy(gameObject);
+    }
+}
+
+public class CoinMove : MonoBehaviour
+{
+    public float speed = 5f;
+
+    void Update()
+    {
+        transform.Translate(Vector2.left * speed * Time.deltaTime);
+
+        if (transform.position.x < -15)
+            Destroy(gameObject);
+    }
+}
